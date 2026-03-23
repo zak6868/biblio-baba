@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ma Bibliothèque</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Open+Sans:wght@400;600&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#FDF6EC;--bg-card:#FFFAF0;--bg-sidebar:#F5E6D0;
+    --text:#3E2C1C;--text-light:#7A6555;
+    --accent:#8B4513;--accent-light:#D2A679;--accent-hover:#A0522D;
+    --border:#E0D0BC;--gold:#DAA520;--gold-light:#FFD700;
+    --success:#4A7C59;--danger:#A0522D;
+    --shadow:0 2px 8px rgba(62,44,28,0.1);
+  }
+  body{font-family:'Open Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
+
+  /* Sidebar */
+  .sidebar{width:240px;background:var(--bg-sidebar);border-right:2px solid var(--border);padding:24px 0;display:flex;flex-direction:column;position:fixed;height:100vh;z-index:10}
+  .sidebar-title{font-family:'Merriweather',serif;font-size:20px;font-weight:700;color:var(--accent);text-align:center;padding:0 16px 24px;border-bottom:1px solid var(--border)}
+  .sidebar-title .icon{font-size:28px;display:block;margin-bottom:4px}
+  .nav-items{padding:16px 0;flex:1}
+  .nav-item{display:flex;align-items:center;gap:12px;padding:12px 24px;cursor:pointer;color:var(--text-light);transition:all 0.2s;font-size:14px;font-weight:600;border-left:3px solid transparent}
+  .nav-item:hover{background:rgba(139,69,19,0.08);color:var(--text)}
+  .nav-item.active{background:rgba(139,69,19,0.12);color:var(--accent);border-left-color:var(--accent)}
+  .nav-item .nav-icon{font-size:20px;width:28px;text-align:center}
+  .sidebar-footer{padding:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+  .sidebar-btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);cursor:pointer;font-size:13px;font-weight:600;transition:all 0.2s}
+  .sidebar-btn:hover{background:var(--accent);color:white;border-color:var(--accent)}
+  .book-count{text-align:center;font-size:12px;color:var(--text-light);padding:8px 0}
+  .book-count strong{color:var(--accent);font-size:18px;display:block}
+  .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#4CAF50;margin-right:6px;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+  /* Main */
+  .main{margin-left:240px;flex:1;padding:32px;min-height:100vh}
+  .page-title{font-family:'Merriweather',serif;font-size:26px;font-weight:700;color:var(--accent);margin-bottom:24px}
+
+  /* Cards */
+  .card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;box-shadow:var(--shadow);margin-bottom:20px}
+  .card-title{font-family:'Merriweather',serif;font-size:16px;font-weight:700;color:var(--accent);margin-bottom:16px}
+
+  /* Form */
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .form-group{display:flex;flex-direction:column;gap:6px}
+  .form-group.full{grid-column:1/-1}
+  .form-group label{font-size:13px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.5px}
+  .form-group input,.form-group select,.form-group textarea{padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:'Open Sans',sans-serif;color:var(--text);background:white;transition:border-color 0.2s}
+  .form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,69,19,0.1)}
+  .form-group textarea{resize:vertical;min-height:60px}
+
+  /* Stars */
+  .star-picker{display:flex;gap:4px}
+  .star-picker span{font-size:28px;cursor:pointer;color:var(--border);transition:color 0.15s;user-select:none}
+  .star-picker span.active{color:var(--gold)}
+  .star-picker span:hover{color:var(--gold-light)}
+
+  /* Buttons */
+  .btn{padding:10px 24px;border-radius:8px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;font-family:'Open Sans',sans-serif}
+  .btn-primary{background:var(--accent);color:white}
+  .btn-primary:hover{background:var(--accent-hover)}
+  .btn-primary:disabled{opacity:0.5;cursor:not-allowed}
+  .btn-secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  .btn-secondary:hover{background:var(--accent);color:white}
+  .btn-danger{background:var(--danger);color:white}
+  .btn-danger:hover{opacity:0.85}
+  .btn-sm{padding:6px 14px;font-size:12px}
+  .btn-row{display:flex;gap:10px;margin-top:16px}
+
+  /* Table */
+  .table-wrapper{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;padding:10px 14px;background:var(--bg-sidebar);color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);white-space:nowrap}
+  td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+  tr:hover td{background:rgba(139,69,19,0.04)}
+  .stars-display{color:var(--gold);font-size:14px;letter-spacing:1px}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+  .badge-lu{background:#E8F5E9;color:var(--success)}
+  .badge-encours{background:#FFF3E0;color:#E65100}
+  .badge-non{background:#F5F5F5;color:#999}
+  .badge-prete{background:#FFF8E1;color:#F57F17}
+  .empty-state{text-align:center;padding:48px;color:var(--text-light)}
+  .empty-state .icon{font-size:48px;margin-bottom:12px}
+  .empty-state p{font-size:14px}
+
+  /* Search */
+  .search-bar{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+  .search-bar input,.search-bar select{padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:'Open Sans',sans-serif;background:white;color:var(--text)}
+  .search-bar input{flex:1;min-width:200px}
+  .search-bar input:focus,.search-bar select:focus{outline:none;border-color:var(--accent)}
+
+  /* Critique */
+  .critique-editor textarea{width:100%;min-height:200px;padding:16px;border:1px solid var(--border);border-radius:8px;font-family:'Merriweather',serif;font-size:15px;line-height:1.8;color:var(--text);background:white;resize:vertical}
+  .critique-editor textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,69,19,0.1)}
+  .critique-card{border-left:4px solid var(--accent);padding:16px 20px;margin-bottom:16px;background:white;border-radius:0 8px 8px 0}
+  .critique-card h3{font-family:'Merriweather',serif;font-size:15px;color:var(--accent);margin-bottom:4px}
+  .critique-card .meta{font-size:12px;color:var(--text-light);margin-bottom:10px}
+  .critique-card .body{font-size:14px;line-height:1.7;white-space:pre-wrap}
+  .critique-actions{display:flex;gap:8px;margin-top:10px}
+
+  /* Loan */
+  .loan-book-select{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px}
+  .loan-book-card{padding:14px;border:2px solid var(--border);border-radius:10px;cursor:pointer;transition:all 0.2s;background:white}
+  .loan-book-card:hover{border-color:var(--accent-light)}
+  .loan-book-card.selected{border-color:var(--accent);background:rgba(139,69,19,0.05)}
+  .loan-book-card h4{font-size:14px;color:var(--text);margin-bottom:2px}
+  .loan-book-card p{font-size:12px;color:var(--text-light)}
+
+  /* Toast */
+  .toast{position:fixed;bottom:24px;right:24px;padding:12px 24px;border-radius:8px;background:var(--success);color:white;font-weight:600;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.15);transform:translateY(100px);opacity:0;transition:all 0.3s;z-index:100}
+  .toast.show{transform:translateY(0);opacity:1}
+
+  /* Config modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:200}
+  .modal{background:var(--bg-card);border-radius:16px;padding:32px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2)}
+  .modal h2{font-family:'Merriweather',serif;color:var(--accent);margin-bottom:8px}
+  .modal p{font-size:14px;color:var(--text-light);margin-bottom:20px;line-height:1.6}
+  .modal .form-group{margin-bottom:16px}
+  .modal code{background:#F5E6D0;padding:2px 6px;border-radius:4px;font-size:13px}
+
+  .loading{text-align:center;padding:20px;color:var(--text-light)}
+
+  @media(max-width:768px){
+    .sidebar{width:64px;padding:16px 0}
+    .sidebar-title span,.nav-item span:not(.nav-icon),.sidebar-footer span,.book-count,.sidebar-btn span{display:none}
+    .nav-item{padding:12px;justify-content:center}
+    .main{margin-left:64px;padding:20px}
+    .form-grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<!-- CONFIG MODAL -->
+<div class="modal-overlay" id="config-modal" style="display:none">
+  <div class="modal">
+    <h2>Connecter ta bibliothèque</h2>
+    <p>Entre les clés de ton projet Supabase.<br>Tu les trouves dans <strong>Settings → API</strong> sur supabase.com</p>
+    <div class="form-group">
+      <label>URL du projet</label>
+      <input type="text" id="cfg-url" placeholder="https://xxxxx.supabase.co" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+    </div>
+    <div class="form-group">
+      <label>Clé publique (anon key)</label>
+      <input type="text" id="cfg-key" placeholder="eyJhbGciOiJIUzI1NiIs..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+    </div>
+    <div class="form-group">
+      <label>Ton prénom (pour savoir qui modifie)</label>
+      <input type="text" id="cfg-name" placeholder="Zak" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveConfig()">Connecter</button>
+    </div>
+    <p id="cfg-error" style="color:var(--danger);font-size:13px;margin-top:10px;display:none"></p>
+  </div>
+</div>
+
+<div class="sidebar">
+  <div class="sidebar-title">
+    <span class="icon">📚</span>
+    <span>Ma Bibliothèque</span>
+  </div>
+  <div class="nav-items">
+    <div class="nav-item active" onclick="showTab('inventory')">
+      <span class="nav-icon">📖</span><span>Inventaire</span>
+    </div>
+    <div class="nav-item" onclick="showTab('loans')">
+      <span class="nav-icon">🤝</span><span>Prêts</span>
+    </div>
+    <div class="nav-item" onclick="showTab('search')">
+      <span class="nav-icon">🔍</span><span>Recherche</span>
+    </div>
+    <div class="nav-item" onclick="showTab('critiques')">
+      <span class="nav-icon">✍️</span><span>Critiques</span>
+    </div>
+  </div>
+  <div class="book-count">
+    <span class="live-dot"></span> En ligne<br>
+    <strong id="totalBooks">0</strong>
+    livres enregistrés
+  </div>
+  <div class="sidebar-footer">
+    <button class="sidebar-btn" onclick="exportExcel()">📤 <span>Exporter Excel</span></button>
+    <button class="sidebar-btn" onclick="document.getElementById('config-modal').style.display='flex'">⚙️ <span>Paramètres</span></button>
+  </div>
+</div>
+
+<div class="main">
+  <!-- INVENTAIRE -->
+  <div id="tab-inventory" class="tab-content">
+    <h1 class="page-title">📖 Inventaire</h1>
+    <div class="card">
+      <div class="card-title">Ajouter un livre</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Titre *</label><input type="text" id="inp-title" placeholder="Titre du livre"></div>
+        <div class="form-group"><label>Auteur</label><input type="text" id="inp-author" placeholder="Nom de l'auteur"></div>
+        <div class="form-group"><label>Genre</label>
+          <select id="inp-genre"><option value="">-- Choisir --</option>
+            <option>Roman</option><option>Roman Philosophique</option><option>Science-fiction</option>
+            <option>Polar</option><option>Policier</option><option>Fantasy</option><option>Romance</option>
+            <option>Biographie</option><option>Histoire</option><option>Poésie</option><option>Essai</option>
+            <option>Philosophie</option><option>Théâtre</option><option>Science</option><option>Medecine</option>
+            <option>Politique</option><option>Économie</option><option>Mathématiques</option>
+            <option>BD</option><option>Manga</option><option>Développement personnel</option><option>Autre</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Année</label><input type="number" id="inp-year" placeholder="2024"></div>
+        <div class="form-group"><label>Lu ?</label>
+          <select id="inp-read"><option value="Non">Non</option><option value="En cours">En cours</option><option value="Oui">Oui</option></select>
+        </div>
+        <div class="form-group"><label>Étoiles</label>
+          <div class="star-picker" id="star-picker-add">
+            <span onclick="setStars('add',1)">★</span><span onclick="setStars('add',2)">★</span><span onclick="setStars('add',3)">★</span><span onclick="setStars('add',4)">★</span><span onclick="setStars('add',5)">★</span>
+          </div>
+        </div>
+        <div class="form-group full"><label>Commentaire</label><textarea id="inp-comment" rows="2" placeholder="Un petit mot sur ce livre..."></textarea></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-add" onclick="addBook()">Ajouter le livre</button>
+        <button class="btn btn-secondary" onclick="clearForm()">Effacer</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Mes livres</div>
+      <div class="table-wrapper">
+        <table><thead><tr><th>Titre</th><th>Auteur</th><th>Genre</th><th>Année</th><th>Lu</th><th>Étoiles</th><th>Prêté à</th><th>Actions</th></tr></thead>
+          <tbody id="books-table"></tbody>
+        </table>
+        <div id="empty-inventory" class="empty-state"><div class="icon">📚</div><p>Aucun livre. Ajoute ton premier livre !</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRÊTS -->
+  <div id="tab-loans" class="tab-content" style="display:none">
+    <h1 class="page-title">🤝 Prêts</h1>
+    <div class="card">
+      <div class="card-title">Prêter un livre</div>
+      <p style="font-size:14px;color:var(--text-light);margin-bottom:16px">Sélectionne un livre puis indique à qui tu le prêtes.</p>
+      <div class="loan-book-select" id="loan-book-list"></div>
+      <div class="form-grid" style="grid-template-columns:1fr auto;align-items:end">
+        <div class="form-group"><label>Prêté à</label><input type="text" id="inp-loan-to" placeholder="Nom de la personne"></div>
+        <button class="btn btn-primary" onclick="loanBook()" style="height:42px">Confirmer le prêt</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Livres actuellement prêtés</div>
+      <table><thead><tr><th>Titre</th><th>Auteur</th><th>Prêté à</th><th>Actions</th></tr></thead>
+        <tbody id="loans-table"></tbody>
+      </table>
+      <div id="empty-loans" class="empty-state"><div class="icon">📦</div><p>Aucun livre prêté.</p></div>
+    </div>
+  </div>
+
+  <!-- RECHERCHE -->
+  <div id="tab-search" class="tab-content" style="display:none">
+    <h1 class="page-title">🔍 Recherche</h1>
+    <div class="card">
+      <div class="search-bar">
+        <input type="text" id="search-query" placeholder="Rechercher un titre, auteur, commentaire..." oninput="doSearch()">
+        <select id="search-genre" onchange="doSearch()"><option value="">Tous les genres</option>
+          <option>Roman</option><option>Roman Philosophique</option><option>Science-fiction</option>
+          <option>Polar</option><option>Policier</option><option>Fantasy</option><option>Romance</option>
+          <option>Biographie</option><option>Histoire</option><option>Poésie</option><option>Essai</option>
+          <option>Philosophie</option><option>Théâtre</option><option>Science</option><option>Medecine</option>
+          <option>Politique</option><option>Économie</option><option>Mathématiques</option>
+          <option>BD</option><option>Manga</option><option>Développement personnel</option><option>Autre</option>
+        </select>
+        <select id="search-read" onchange="doSearch()"><option value="">Lu / Non lu</option><option value="Oui">Lu</option><option value="Non">Non lu</option><option value="En cours">En cours</option></select>
+        <select id="search-stars" onchange="doSearch()"><option value="">Toutes les notes</option><option value="5">★★★★★</option><option value="4">★★★★ et +</option><option value="3">★★★ et +</option><option value="2">★★ et +</option><option value="1">★ et +</option></select>
+      </div>
+      <div id="search-count" style="font-size:13px;color:var(--text-light);margin-bottom:12px"></div>
+      <div class="table-wrapper">
+        <table><thead><tr><th>Titre</th><th>Auteur</th><th>Genre</th><th>Année</th><th>Lu</th><th>Étoiles</th><th>Commentaire</th></tr></thead>
+          <tbody id="search-table"></tbody>
+        </table>
+      </div>
+      <div id="empty-search" class="empty-state" style="display:none"><div class="icon">🔎</div><p>Aucun résultat.</p></div>
+    </div>
+  </div>
+
+  <!-- CRITIQUES -->
+  <div id="tab-critiques" class="tab-content" style="display:none">
+    <h1 class="page-title">✍️ Critiques</h1>
+    <div class="card">
+      <div class="card-title">Rédiger une critique</div>
+      <div class="form-grid" style="grid-template-columns:1fr auto;align-items:end;margin-bottom:16px">
+        <div class="form-group"><label>Livre</label><select id="critique-book"><option value="">-- Sélectionner un livre --</option></select></div>
+        <div class="form-group"><label>Note</label>
+          <div class="star-picker" id="star-picker-critique">
+            <span onclick="setStars('critique',1)">★</span><span onclick="setStars('critique',2)">★</span><span onclick="setStars('critique',3)">★</span><span onclick="setStars('critique',4)">★</span><span onclick="setStars('critique',5)">★</span>
+          </div>
+        </div>
+      </div>
+      <div class="critique-editor"><textarea id="critique-text" placeholder="Écris ta critique ici..."></textarea></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-critique" onclick="saveCritique()">Publier la critique</button>
+        <button class="btn btn-secondary" id="btn-cancel-edit" onclick="cancelEdit()" style="display:none">Annuler</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Toutes les critiques</div>
+      <div id="critiques-list"></div>
+      <div id="empty-critiques" class="empty-state"><div class="icon">📝</div><p>Aucune critique. Choisis un livre et partage ton avis !</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ====== CONFIG ======
+let supabase = null;
+let books = [];
+let critiques = [];
+let selectedStars = { add: 0, critique: 0 };
+let selectedLoanBook = null;
+let editingCritiqueId = null;
+let userName = 'Anonyme';
+
+function loadConfig() {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  userName = localStorage.getItem('sb_name') || 'Anonyme';
+  if (url && key) {
+    initSupabase(url, key);
+  } else {
+    document.getElementById('config-modal').style.display = 'flex';
+  }
+}
+
+async function saveConfig() {
+  const url = document.getElementById('cfg-url').value.trim().replace(/\/+$/, '');
+  const key = document.getElementById('cfg-key').value.trim();
+  const name = document.getElementById('cfg-name').value.trim() || 'Anonyme';
+  if (!url || !key) { showCfgError('Remplis les deux champs'); return; }
+  try {
+    const client = window.supabase.createClient(url, key);
+    const { error } = await client.from('books').select('id').limit(1);
+    if (error) throw error;
+    localStorage.setItem('sb_url', url);
+    localStorage.setItem('sb_key', key);
+    localStorage.setItem('sb_name', name);
+    userName = name;
+    document.getElementById('config-modal').style.display = 'none';
+    initSupabase(url, key);
+  } catch (e) {
+    showCfgError('Connexion échouée. Vérifie tes clés et que le script SQL a été exécuté. Erreur: ' + e.message);
+  }
+}
+
+function showCfgError(msg) {
+  const el = document.getElementById('cfg-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// ====== SUPABASE INIT ======
+async function initSupabase(url, key) {
+  supabase = window.supabase.createClient(url, key);
+  await loadBooks();
+  await loadCritiques();
+  subscribeRealtime();
+}
+
+// ====== REALTIME ======
+function subscribeRealtime() {
+  supabase.channel('books-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'books' }, () => loadBooks())
+    .subscribe();
+  supabase.channel('critiques-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'critiques' }, () => loadCritiques())
+    .subscribe();
+}
+
+// ====== BOOKS CRUD ======
+async function loadBooks() {
+  const { data } = await supabase.from('books').select('*').order('created_at', { ascending: false });
+  books = data || [];
+  renderBooks();
+  renderLoans();
+  doSearch();
+  updateCritiqueBookSelect();
+}
+
+async function addBook() {
+  const title = document.getElementById('inp-title').value.trim();
+  if (!title) { toast('Le titre est obligatoire !'); return; }
+  document.getElementById('btn-add').disabled = true;
+  const { error } = await supabase.from('books').insert({
+    title,
+    author: document.getElementById('inp-author').value.trim(),
+    genre: document.getElementById('inp-genre').value,
+    year: parseInt(document.getElementById('inp-year').value) || null,
+    read_status: document.getElementById('inp-read').value,
+    stars: selectedStars.add,
+    comment: document.getElementById('inp-comment').value.trim(),
+    updated_by: userName
+  });
+  document.getElementById('btn-add').disabled = false;
+  if (error) { toast('Erreur: ' + error.message); return; }
+  clearForm();
+  toast('Livre ajouté !');
+}
+
+async function deleteBook(id) {
+  if (!confirm('Supprimer ce livre ?')) return;
+  await supabase.from('books').delete().eq('id', id);
+  toast('Livre supprimé');
+}
+
+async function loanBook() {
+  if (!selectedLoanBook) { toast('Sélectionne un livre !'); return; }
+  const to = document.getElementById('inp-loan-to').value.trim();
+  if (!to) { toast('Indique à qui !'); return; }
+  await supabase.from('books').update({ loaned_to: to, updated_by: userName }).eq('id', selectedLoanBook);
+  selectedLoanBook = null;
+  document.getElementById('inp-loan-to').value = '';
+  toast('Prêt enregistré !');
+}
+
+async function returnBook(id) {
+  await supabase.from('books').update({ loaned_to: '', updated_by: userName }).eq('id', id);
+  toast('Livre récupéré !');
+}
+
+// ====== CRITIQUES CRUD ======
+async function loadCritiques() {
+  const { data } = await supabase.from('critiques').select('*').order('created_at', { ascending: false });
+  critiques = data || [];
+  renderCritiques();
+}
+
+async function saveCritique() {
+  const bookId = document.getElementById('critique-book').value;
+  const text = document.getElementById('critique-text').value.trim();
+  if (!bookId) { toast('Sélectionne un livre !'); return; }
+  if (!text) { toast('Écris ta critique !'); return; }
+  document.getElementById('btn-critique').disabled = true;
+  if (editingCritiqueId) {
+    await supabase.from('critiques').update({ text, stars: selectedStars.critique, updated_at: new Date().toISOString() }).eq('id', editingCritiqueId);
+    editingCritiqueId = null;
+    document.getElementById('btn-critique').textContent = 'Publier la critique';
+    document.getElementById('btn-cancel-edit').style.display = 'none';
+    toast('Critique modifiée !');
+  } else {
+    await supabase.from('critiques').insert({ book_id: bookId, text, stars: selectedStars.critique, author_name: userName });
+    toast('Critique publiée !');
+  }
+  document.getElementById('btn-critique').disabled = false;
+  document.getElementById('critique-text').value = '';
+  document.getElementById('critique-book').value = '';
+  setStars('critique', 0);
+}
+
+async function deleteCritique(id) {
+  if (!confirm('Supprimer cette critique ?')) return;
+  await supabase.from('critiques').delete().eq('id', id);
+  toast('Critique supprimée');
+}
+
+function editCritique(id) {
+  const c = critiques.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('critique-book').value = c.book_id;
+  document.getElementById('critique-text').value = c.text;
+  setStars('critique', c.stars);
+  editingCritiqueId = id;
+  document.getElementById('btn-critique').textContent = 'Modifier la critique';
+  document.getElementById('btn-cancel-edit').style.display = 'inline-block';
+  showTab('critiques');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancelEdit() {
+  editingCritiqueId = null;
+  document.getElementById('critique-text').value = '';
+  document.getElementById('critique-book').value = '';
+  setStars('critique', 0);
+  document.getElementById('btn-critique').textContent = 'Publier la critique';
+  document.getElementById('btn-cancel-edit').style.display = 'none';
+}
+
+// ====== RENDER ======
+function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+function starsHtml(n) { return n > 0 ? '<span class="stars-display">' + '★'.repeat(n) + '<span style="color:var(--border)">' + '★'.repeat(5-n) + '</span></span>' : '<span style="color:var(--border)">—</span>'; }
+function readBadge(r) { const c = r==='Oui'?'badge-lu':r==='En cours'?'badge-encours':'badge-non'; return `<span class="badge ${c}">${r}</span>`; }
+
+function renderBooks() {
+  document.getElementById('totalBooks').textContent = books.length;
+  const tbody = document.getElementById('books-table');
+  const empty = document.getElementById('empty-inventory');
+  if (!books.length) { tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  tbody.innerHTML = books.map(b => `<tr>
+    <td><strong>${esc(b.title)}</strong></td><td>${esc(b.author)}</td><td>${esc(b.genre)}</td>
+    <td>${b.year||''}</td><td>${readBadge(b.read_status)}</td><td>${starsHtml(b.stars)}</td>
+    <td>${b.loaned_to ? '<span class="badge badge-prete">📦 '+esc(b.loaned_to)+'</span>':''}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="deleteBook('${b.id}')">Supprimer</button></td>
+  </tr>`).join('');
+}
+
+function renderLoans() {
+  const available = books.filter(b => !b.loaned_to);
+  const list = document.getElementById('loan-book-list');
+  list.innerHTML = available.length ? available.map(b => `<div class="loan-book-card ${selectedLoanBook===b.id?'selected':''}" onclick="selectedLoanBook='${b.id}';renderLoans()">
+    <h4>${esc(b.title)}</h4><p>${esc(b.author)} · ${esc(b.genre)}</p>
+  </div>`).join('') : '<p style="color:var(--text-light);font-size:14px;padding:8px">Aucun livre disponible.</p>';
+  const loaned = books.filter(b => b.loaned_to);
+  const tbody = document.getElementById('loans-table');
+  const empty = document.getElementById('empty-loans');
+  if (!loaned.length) { tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  tbody.innerHTML = loaned.map(b => `<tr>
+    <td><strong>${esc(b.title)}</strong></td><td>${esc(b.author)}</td>
+    <td><span class="badge badge-prete">${esc(b.loaned_to)}</span></td>
+    <td><button class="btn btn-secondary btn-sm" onclick="returnBook('${b.id}')">Récupéré</button></td>
+  </tr>`).join('');
+}
+
+function doSearch() {
+  const q = (document.getElementById('search-query').value||'').toLowerCase();
+  const genre = document.getElementById('search-genre').value;
+  const read = document.getElementById('search-read').value;
+  const minStars = parseInt(document.getElementById('search-stars').value)||0;
+  const results = books.filter(b => {
+    if (q && !(b.title?.toLowerCase().includes(q) || b.author?.toLowerCase().includes(q) || b.comment?.toLowerCase().includes(q))) return false;
+    if (genre && b.genre !== genre) return false;
+    if (read && b.read_status !== read) return false;
+    if (minStars && (b.stars||0) < minStars) return false;
+    return true;
+  });
+  document.getElementById('search-count').textContent = `${results.length} livre${results.length!==1?'s':''} trouvé${results.length!==1?'s':''}`;
+  const tbody = document.getElementById('search-table');
+  const empty = document.getElementById('empty-search');
+  if (!results.length) { tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  tbody.innerHTML = results.map(b => `<tr>
+    <td><strong>${esc(b.title)}</strong></td><td>${esc(b.author)}</td><td>${esc(b.genre)}</td>
+    <td>${b.year||''}</td><td>${readBadge(b.read_status)}</td><td>${starsHtml(b.stars)}</td>
+    <td>${esc(b.comment)}</td>
+  </tr>`).join('');
+}
+
+function updateCritiqueBookSelect() {
+  const sel = document.getElementById('critique-book');
+  const val = sel.value;
+  sel.innerHTML = '<option value="">-- Sélectionner --</option>' + books.map(b => `<option value="${b.id}">${esc(b.title)} — ${esc(b.author)}</option>`).join('');
+  if (val) sel.value = val;
+}
+
+function renderCritiques() {
+  const list = document.getElementById('critiques-list');
+  const empty = document.getElementById('empty-critiques');
+  if (!critiques.length) { list.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  list.innerHTML = critiques.map(c => {
+    const b = books.find(x => x.id === c.book_id);
+    const date = new Date(c.created_at).toLocaleDateString('fr-FR');
+    return `<div class="critique-card">
+      <h3>${b ? esc(b.title) : 'Livre supprimé'}</h3>
+      <div class="meta">${b ? esc(b.author)+' · ':''} ${starsHtml(c.stars)} · par ${esc(c.author_name)} · ${date}</div>
+      <div class="body">${esc(c.text)}</div>
+      <div class="critique-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editCritique('${c.id}')">Modifier</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCritique('${c.id}')">Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ====== UTILS ======
+function setStars(picker, n) {
+  selectedStars[picker] = n;
+  [...document.getElementById(`star-picker-${picker}`).children].forEach((s,i) => s.classList.toggle('active', i<n));
+}
+
+function clearForm() {
+  ['inp-title','inp-author','inp-year','inp-comment'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('inp-genre').value='';
+  document.getElementById('inp-read').value='Non';
+  setStars('add', 0);
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.style.display='none');
+  document.getElementById('tab-'+name).style.display='block';
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  [...document.querySelectorAll('.nav-item')].find(n => n.getAttribute('onclick')?.includes(name))?.classList.add('active');
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function exportExcel() {
+  const data = books.map(b => ({
+    'Titre': b.title, 'Auteur': b.author, 'Genre': b.genre,
+    'Année': b.year, 'Lu ?': b.read_status,
+    'Étoiles': b.stars > 0 ? '★'.repeat(b.stars) : '',
+    'Prêté à': b.loaned_to, 'Commentaire': b.comment
+  }));
+  const critData = critiques.map(c => {
+    const b = books.find(x => x.id === c.book_id) || {};
+    return { 'Titre': b.title||'', 'Auteur': b.author||'', 'Note': c.stars > 0 ? '★'.repeat(c.stars) : '', 'Par': c.author_name, 'Date': new Date(c.created_at).toLocaleDateString('fr-FR'), 'Critique': c.text };
+  });
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.json_to_sheet(data);
+  ws1['!cols'] = [{wch:35},{wch:25},{wch:18},{wch:10},{wch:10},{wch:12},{wch:18},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Inventaire');
+  if (critData.length) {
+    const ws2 = XLSX.utils.json_to_sheet(critData);
+    ws2['!cols'] = [{wch:35},{wch:25},{wch:12},{wch:15},{wch:12},{wch:60}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Critiques');
+  }
+  XLSX.writeFile(wb, 'ma-bibliotheque.xlsx');
+  toast('Excel exporté !');
+}
+
+// ====== INIT ======
+loadConfig();
+</script>
+</body>
+</html>
