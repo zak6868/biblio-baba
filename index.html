@@ -168,42 +168,38 @@
 </head>
 <body>
 
-<!-- PASSWORD MODAL -->
-<div class="modal-overlay" id="password-modal" style="display:flex">
-  <div class="password-modal">
-    <span class="icon">🔐</span>
-    <h2>Ma Bibliothèque</h2>
-    <p>Entre le mot de passe pour accéder à ta bibliothèque.</p>
-    <div class="form-group">
-      <input type="password" id="pwd-input" placeholder="Mot de passe" onkeypress="if(event.key==='Enter') checkPassword()">
-    </div>
-    <button class="btn btn-primary" onclick="checkPassword()" style="background:white;color:var(--accent)">Accès</button>
-    <div class="error" id="pwd-error">Mot de passe incorrect</div>
-  </div>
-</div>
-
-<!-- CONFIG MODAL -->
-<div class="modal-overlay" id="config-modal" style="display:none">
+<!-- PASSWORD SCREEN -->
+<div class="modal-overlay" id="password-screen" style="display:flex">
   <div class="modal">
-    <h2>Connecter ta bibliothèque</h2>
-    <p>Entre les clés de ton projet Supabase.<br>Tu les trouves dans <strong>Settings → API</strong> sur supabase.com</p>
+    <h2>📚 Ma Bibliothèque</h2>
+    <p>Entre le mot de passe pour accéder à la bibliothèque.</p>
     <div class="form-group">
-      <label>URL du projet</label>
-      <input type="text" id="cfg-url" placeholder="https://xxxxx.supabase.co" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+      <label>Mot de passe</label>
+      <input type="password" id="pwd-input" placeholder="Mot de passe" onkeydown="if(event.key==='Enter')checkPassword()" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px">
     </div>
-    <div class="form-group">
-      <label>Clé publique (anon key)</label>
-      <input type="text" id="cfg-key" placeholder="eyJhbGciOiJIUzI1NiIs..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px">
-    </div>
-    <div class="form-group">
+    <div class="form-group" id="name-group" style="display:none;margin-top:12px">
       <label>Ton prénom (pour savoir qui modifie)</label>
       <input type="text" id="cfg-name" placeholder="Zak" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px">
     </div>
     <div class="btn-row">
-      <button class="btn btn-primary" onclick="saveConfig()">Connecter</button>
-      <button class="btn btn-secondary" onclick="closeConfig()">Fermer</button>
+      <button class="btn btn-primary" onclick="checkPassword()">Entrer</button>
     </div>
-    <p id="cfg-error" style="color:var(--danger);font-size:13px;margin-top:10px;display:none"></p>
+    <p id="pwd-error" style="color:var(--danger);font-size:13px;margin-top:10px;display:none"></p>
+  </div>
+</div>
+
+<!-- CONFIG MODAL (hidden, kept for name changes) -->
+<div class="modal-overlay" id="config-modal" style="display:none">
+  <div class="modal">
+    <h2>Paramètres</h2>
+    <div class="form-group">
+      <label>Ton prénom</label>
+      <input type="text" id="cfg-name-settings" placeholder="Zak" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveName()">Enregistrer</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('config-modal').style.display='none'">Fermer</button>
+    </div>
   </div>
 </div>
 
@@ -243,7 +239,7 @@
   </div>
   <div class="sidebar-footer">
     <button class="sidebar-btn" onclick="exportExcel()">📤 <span>Exporter Excel</span></button>
-    <button class="sidebar-btn" onclick="document.getElementById('config-modal').style.display='flex'">⚙️ <span>Paramètres</span></button>
+    <button class="sidebar-btn" onclick="openSettings()">⚙️ <span>Paramètres</span></button>
   </div>
 </div>
 
@@ -383,6 +379,10 @@
 
 <script>
 // ====== CONFIG ======
+const SB_URL = 'https://vpyqgdmvwldyormsskbi.supabase.co';
+const SB_KEY = 'sb_publishable_aXmKnX1jdMQVGVWNeVoUMA_8wO0Uyke';
+const APP_PASSWORD = 'zinebzakaria';
+
 let sbClient = null;
 let books = [];
 let critiques = [];
@@ -390,74 +390,43 @@ let selectedStars = { add: 0, critique: 0 };
 let selectedLoanBook = null;
 let editingCritiqueId = null;
 let editingBookId = null;
-let userName = 'Anonyme';
+let userName = localStorage.getItem('sb_name') || 'Anonyme';
 
-// ====== PASSWORD ======
 function checkPassword() {
   const pwd = document.getElementById('pwd-input').value;
-  const correct = 'biblio2024';
-  if (pwd === correct) {
-    localStorage.setItem('sb_password', 'verified');
-    document.getElementById('password-modal').style.display = 'none';
-    loadConfig();
+  if (pwd === APP_PASSWORD) {
+    // If no name saved yet, ask for it
+    if (!localStorage.getItem('sb_name')) {
+      const nameGroup = document.getElementById('name-group');
+      if (nameGroup.style.display === 'none') {
+        nameGroup.style.display = 'block';
+        document.getElementById('cfg-name').focus();
+        return;
+      }
+      const name = document.getElementById('cfg-name').value.trim() || 'Anonyme';
+      localStorage.setItem('sb_name', name);
+      userName = name;
+    }
+    document.getElementById('password-screen').style.display = 'none';
+    initSupabase(SB_URL, SB_KEY);
   } else {
-    document.getElementById('pwd-error').style.display = 'block';
-    document.getElementById('pwd-input').value = '';
+    const el = document.getElementById('pwd-error');
+    el.textContent = 'Mot de passe incorrect.';
+    el.style.display = 'block';
   }
 }
 
-function initPasswordModal() {
-  const verified = localStorage.getItem('sb_password');
-  if (!verified) {
-    document.getElementById('password-modal').style.display = 'flex';
-  } else {
-    document.getElementById('password-modal').style.display = 'none';
-    loadConfig();
-  }
-}
-
-function loadConfig() {
-  const url = localStorage.getItem('sb_url');
-  const key = localStorage.getItem('sb_key');
-  userName = localStorage.getItem('sb_name') || 'Anonyme';
-  if (url && key) {
-    initSupabase(url, key);
-  } else {
-    document.getElementById('config-modal').style.display = 'flex';
-  }
-}
-
-function closeConfig() {
-  if (!sbClient) {
-    alert('Veuillez d\'abord connecter votre bibliothèque.');
-    return;
-  }
+function saveName() {
+  const name = document.getElementById('cfg-name-settings').value.trim() || 'Anonyme';
+  localStorage.setItem('sb_name', name);
+  userName = name;
   document.getElementById('config-modal').style.display = 'none';
+  toast('Prénom mis à jour !');
 }
 
-async function saveConfig() {
-  const url = document.getElementById('cfg-url').value.trim().replace(/\/+$/, '');
-  const key = document.getElementById('cfg-key').value.trim();
-  const name = document.getElementById('cfg-name').value.trim() || 'Anonyme';
-  if (!url || !key) { showCfgError('Remplis les deux champs'); return; }
-  try {
-    const client = window.supabase.createClient(url, key);
-    const { error } = await client.from('books').select('id').limit(1);
-    if (error) throw error;
-    localStorage.setItem('sb_url', url);
-    localStorage.setItem('sb_key', key);
-    localStorage.setItem('sb_name', name);
-    userName = name;
-    document.getElementById('config-modal').style.display = 'none';
-    initSupabase(url, key);
-  } catch (e) {
-    showCfgError('Connexion échouée. Vérifie tes clés et que le script SQL a été exécuté. Erreur: ' + e.message);
-  }
-}
-
-function showCfgError(msg) {
-  const el = document.getElementById('cfg-error');
-  el.textContent = msg; el.style.display = 'block';
+function openSettings() {
+  document.getElementById('cfg-name-settings').value = userName;
+  document.getElementById('config-modal').style.display = 'flex';
 }
 
 // ====== SUPABASE INIT ======
@@ -912,7 +881,8 @@ function exportExcel() {
 // ====== INIT ======
 renderStarPicker('add');
 renderStarPicker('critique');
-initPasswordModal();
+// Auto-focus password input
+document.getElementById('pwd-input').focus();
 </script>
 </body>
 </html>
