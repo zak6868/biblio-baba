@@ -53,11 +53,12 @@
   .form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,69,19,0.1)}
   .form-group textarea{resize:vertical;min-height:60px}
 
-  /* Stars */
-  .star-picker{display:flex;gap:4px}
-  .star-picker span{font-size:28px;cursor:pointer;color:var(--border);transition:color 0.15s;user-select:none}
-  .star-picker span.active{color:var(--gold)}
-  .star-picker span:hover{color:var(--gold-light)}
+  /* Stars - with half-star support */
+  .star-picker{display:flex;gap:0;align-items:center}
+  .star-container{position:relative;display:inline-block;width:28px;height:28px;margin-right:2px;cursor:pointer}
+  .star-container .star-bg{position:absolute;left:0;top:0;font-size:28px;color:var(--border);cursor:pointer;user-select:none;width:100%;height:100%;line-height:1}
+  .star-container .star-fg{position:absolute;left:0;top:0;font-size:28px;color:var(--gold);cursor:pointer;user-select:none;width:0%;height:100%;overflow:hidden;line-height:1;transition:width 0.15s}
+  .star-container:hover .star-bg{color:var(--gold-light)}
 
   /* Buttons */
   .btn{padding:10px 24px;border-radius:8px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.2s;font-family:'Open Sans',sans-serif}
@@ -117,10 +118,21 @@
   /* Config modal */
   .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:200}
   .modal{background:var(--bg-card);border-radius:16px;padding:32px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2)}
-  .modal h2{font-family:'Merriweather',serif;color:var(--accent);margin-bottom:8px}
+  .modal h2{font-family:'Merriweather',serif;color:var(--accent);margin-bottom:8px;font-size:24px}
   .modal p{font-size:14px;color:var(--text-light);margin-bottom:20px;line-height:1.6}
   .modal .form-group{margin-bottom:16px}
   .modal code{background:#F5E6D0;padding:2px 6px;border-radius:4px;font-size:13px}
+
+  /* Password modal */
+  .password-modal{background:linear-gradient(135deg,var(--accent) 0%,var(--accent-hover) 100%);border-radius:16px;padding:48px 32px;max-width:420px;width:90%;box-shadow:0 16px 48px rgba(0,0,0,0.3);text-align:center}
+  .password-modal h2{font-family:'Merriweather',serif;color:white;margin-bottom:8px;font-size:28px}
+  .password-modal .icon{font-size:48px;margin-bottom:16px;display:block}
+  .password-modal p{font-size:15px;color:rgba(255,255,255,0.95);margin-bottom:24px;line-height:1.6}
+  .password-modal .form-group{margin-bottom:16px}
+  .password-modal input{padding:12px 16px;border:2px solid rgba(255,255,255,0.3);border-radius:8px;font-size:15px;font-family:'Open Sans',sans-serif;color:var(--text);background:rgba(255,255,255,0.95);width:100%;transition:border-color 0.2s}
+  .password-modal input:focus{outline:none;border-color:white;box-shadow:0 0 0 3px rgba(255,255,255,0.2)}
+  .password-modal .btn{width:100%}
+  .password-modal .error{color:#FFB3BA;font-size:13px;margin-top:10px;display:none}
 
   .loading{text-align:center;padding:20px;color:var(--text-light)}
 
@@ -134,6 +146,20 @@
 </style>
 </head>
 <body>
+
+<!-- PASSWORD MODAL -->
+<div class="modal-overlay" id="password-modal" style="display:flex">
+  <div class="password-modal">
+    <span class="icon">🔐</span>
+    <h2>Ma Bibliothèque</h2>
+    <p>Entre le mot de passe pour accéder à ta bibliothèque.</p>
+    <div class="form-group">
+      <input type="password" id="pwd-input" placeholder="Mot de passe" onkeypress="if(event.key==='Enter') checkPassword()">
+    </div>
+    <button class="btn btn-primary" onclick="checkPassword()" style="background:white;color:var(--accent)">Accès</button>
+    <div class="error" id="pwd-error">Mot de passe incorrect</div>
+  </div>
+</div>
 
 <!-- CONFIG MODAL -->
 <div class="modal-overlay" id="config-modal" style="display:none">
@@ -213,9 +239,7 @@
           <select id="inp-read"><option value="Non">Non</option><option value="En cours">En cours</option><option value="Oui">Oui</option></select>
         </div>
         <div class="form-group"><label>Étoiles</label>
-          <div class="star-picker" id="star-picker-add">
-            <span onclick="setStars('add',1)">★</span><span onclick="setStars('add',2)">★</span><span onclick="setStars('add',3)">★</span><span onclick="setStars('add',4)">★</span><span onclick="setStars('add',5)">★</span>
-          </div>
+          <div class="star-picker" id="star-picker-add"></div>
         </div>
         <div class="form-group full"><label>Commentaire</label><textarea id="inp-comment" rows="2" placeholder="Un petit mot sur ce livre..."></textarea></div>
       </div>
@@ -241,6 +265,9 @@
     <div class="card">
       <div class="card-title">Prêter un livre</div>
       <p style="font-size:14px;color:var(--text-light);margin-bottom:16px">Sélectionne un livre puis indique à qui tu le prêtes.</p>
+      <div class="search-bar" style="margin-bottom:16px">
+        <input type="text" id="loan-search" placeholder="Filtrer par titre..." oninput="filterLoanBooks()">
+      </div>
       <div class="loan-book-select" id="loan-book-list"></div>
       <div class="form-grid" style="grid-template-columns:1fr auto;align-items:end">
         <div class="form-group"><label>Prêté à</label><input type="text" id="inp-loan-to" placeholder="Nom de la personne"></div>
@@ -291,9 +318,7 @@
       <div class="form-grid" style="grid-template-columns:1fr auto;align-items:end;margin-bottom:16px">
         <div class="form-group"><label>Livre</label><select id="critique-book"><option value="">-- Sélectionner un livre --</option></select></div>
         <div class="form-group"><label>Note</label>
-          <div class="star-picker" id="star-picker-critique">
-            <span onclick="setStars('critique',1)">★</span><span onclick="setStars('critique',2)">★</span><span onclick="setStars('critique',3)">★</span><span onclick="setStars('critique',4)">★</span><span onclick="setStars('critique',5)">★</span>
-          </div>
+          <div class="star-picker" id="star-picker-critique"></div>
         </div>
       </div>
       <div class="critique-editor"><textarea id="critique-text" placeholder="Écris ta critique ici..."></textarea></div>
@@ -321,6 +346,30 @@ let selectedStars = { add: 0, critique: 0 };
 let selectedLoanBook = null;
 let editingCritiqueId = null;
 let userName = 'Anonyme';
+
+// ====== PASSWORD ======
+function checkPassword() {
+  const pwd = document.getElementById('pwd-input').value;
+  const correct = 'biblio2024';
+  if (pwd === correct) {
+    localStorage.setItem('sb_password', 'verified');
+    document.getElementById('password-modal').style.display = 'none';
+    loadConfig();
+  } else {
+    document.getElementById('pwd-error').style.display = 'block';
+    document.getElementById('pwd-input').value = '';
+  }
+}
+
+function initPasswordModal() {
+  const verified = localStorage.getItem('sb_password');
+  if (!verified) {
+    document.getElementById('password-modal').style.display = 'flex';
+  } else {
+    document.getElementById('password-modal').style.display = 'none';
+    loadConfig();
+  }
+}
 
 function loadConfig() {
   const url = localStorage.getItem('sb_url');
@@ -419,6 +468,7 @@ async function loanBook() {
   await sbClient.from('books').update({ loaned_to: to, updated_by: userName }).eq('id', selectedLoanBook);
   selectedLoanBook = null;
   document.getElementById('inp-loan-to').value = '';
+  document.getElementById('loan-search').value = '';
   toast('Prêt enregistré !');
 }
 
@@ -486,8 +536,51 @@ function cancelEdit() {
 
 // ====== RENDER ======
 function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
-function starsHtml(n) { return n > 0 ? '<span class="stars-display">' + '★'.repeat(n) + '<span style="color:var(--border)">' + '★'.repeat(5-n) + '</span></span>' : '<span style="color:var(--border)">—</span>'; }
+
+function starsHtml(n) {
+  if (n <= 0) return '<span style="color:var(--border)">—</span>';
+  let html = '<span class="stars-display">';
+  const fullStars = Math.floor(n);
+  const hasHalf = n % 1 !== 0;
+  for (let i = 0; i < fullStars; i++) html += '★';
+  if (hasHalf) html += '✦';
+  const emptyStars = hasHalf ? 5 - fullStars - 1 : 5 - fullStars;
+  html += '<span style="color:var(--border)">' + '★'.repeat(emptyStars);
+  if (hasHalf) html += '';
+  html += '</span></span>';
+  return html;
+}
+
 function readBadge(r) { const c = r==='Oui'?'badge-lu':r==='En cours'?'badge-encours':'badge-non'; return `<span class="badge ${c}">${r}</span>`; }
+
+function renderStarPicker(picker) {
+  const container = document.getElementById(`star-picker-${picker}`);
+  container.innerHTML = '';
+  for (let i = 1; i <= 5; i++) {
+    const div = document.createElement('div');
+    div.className = 'star-container';
+    div.innerHTML = `<span class="star-bg" onclick="setStars('${picker}',${i})">★</span><span class="star-fg" onclick="setStars('${picker}',${i-0.5})">★</span>`;
+    container.appendChild(div);
+  }
+  updateStarPicker(picker);
+}
+
+function updateStarPicker(picker) {
+  const rating = selectedStars[picker];
+  const container = document.getElementById(`star-picker-${picker}`);
+  const stars = container.querySelectorAll('.star-container');
+  stars.forEach((star, idx) => {
+    const starNum = idx + 1;
+    const fg = star.querySelector('.star-fg');
+    if (rating >= starNum) {
+      fg.style.width = '100%';
+    } else if (rating > starNum - 1) {
+      fg.style.width = '50%';
+    } else {
+      fg.style.width = '0%';
+    }
+  });
+}
 
 function renderBooks() {
   document.getElementById('totalBooks').textContent = books.length;
@@ -501,6 +594,15 @@ function renderBooks() {
     <td>${b.loaned_to ? '<span class="badge badge-prete">📦 '+esc(b.loaned_to)+'</span>':''}</td>
     <td><button class="btn btn-danger btn-sm" onclick="deleteBook('${b.id}')">Supprimer</button></td>
   </tr>`).join('');
+}
+
+function filterLoanBooks() {
+  const query = document.getElementById('loan-search').value.toLowerCase();
+  const cards = document.querySelectorAll('.loan-book-card');
+  cards.forEach(card => {
+    const title = card.querySelector('h4').textContent.toLowerCase();
+    card.style.display = title.includes(query) ? 'block' : 'none';
+  });
 }
 
 function renderLoans() {
@@ -575,7 +677,7 @@ function renderCritiques() {
 // ====== UTILS ======
 function setStars(picker, n) {
   selectedStars[picker] = n;
-  [...document.getElementById(`star-picker-${picker}`).children].forEach((s,i) => s.classList.toggle('active', i<n));
+  updateStarPicker(picker);
 }
 
 function clearForm() {
@@ -602,12 +704,12 @@ function exportExcel() {
   const data = books.map(b => ({
     'Titre': b.title, 'Auteur': b.author, 'Genre': b.genre,
     'Année': b.year, 'Lu ?': b.read_status,
-    'Étoiles': b.stars > 0 ? '★'.repeat(b.stars) : '',
+    'Étoiles': b.stars > 0 ? (b.stars % 1 === 0 ? '★'.repeat(b.stars) : '★'.repeat(Math.floor(b.stars)) + '✦') : '',
     'Prêté à': b.loaned_to, 'Commentaire': b.comment
   }));
   const critData = critiques.map(c => {
     const b = books.find(x => x.id === c.book_id) || {};
-    return { 'Titre': b.title||'', 'Auteur': b.author||'', 'Note': c.stars > 0 ? '★'.repeat(c.stars) : '', 'Par': c.author_name, 'Date': new Date(c.created_at).toLocaleDateString('fr-FR'), 'Critique': c.text };
+    return { 'Titre': b.title||'', 'Auteur': b.author||'', 'Note': c.stars > 0 ? (c.stars % 1 === 0 ? '★'.repeat(c.stars) : '★'.repeat(Math.floor(c.stars)) + '✦') : '', 'Par': c.author_name, 'Date': new Date(c.created_at).toLocaleDateString('fr-FR'), 'Critique': c.text };
   });
   const wb = XLSX.utils.book_new();
   const ws1 = XLSX.utils.json_to_sheet(data);
@@ -623,7 +725,9 @@ function exportExcel() {
 }
 
 // ====== INIT ======
-loadConfig();
+renderStarPicker('add');
+renderStarPicker('critique');
+initPasswordModal();
 </script>
 </body>
 </html>
