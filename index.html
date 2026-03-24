@@ -76,6 +76,11 @@
   .table-wrapper{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th{text-align:left;padding:10px 14px;background:var(--bg-sidebar);color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);white-space:nowrap}
+  th.sortable{cursor:pointer;user-select:none;transition:background 0.2s}
+  th.sortable:hover{background:var(--accent-light);color:white}
+  th.sortable::after{content:'';display:inline-block;margin-left:6px;font-size:10px}
+  th.sortable.asc::after{content:'▲'}
+  th.sortable.desc::after{content:'▼'}
   td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
   tr:hover td{background:rgba(139,69,19,0.04)}
   .stars-display{color:var(--gold);font-size:14px;letter-spacing:1px}
@@ -97,11 +102,25 @@
   /* Critique */
   .critique-editor textarea{width:100%;min-height:200px;padding:16px;border:1px solid var(--border);border-radius:8px;font-family:'Merriweather',serif;font-size:15px;line-height:1.8;color:var(--text);background:white;resize:vertical}
   .critique-editor textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(139,69,19,0.1)}
-  .critique-card{border-left:4px solid var(--accent);padding:16px 20px;margin-bottom:16px;background:white;border-radius:0 8px 8px 0}
+  .critique-card{border-left:4px solid var(--accent);padding:16px 20px;margin-bottom:16px;background:white;border-radius:0 8px 8px 0;cursor:pointer;transition:all 0.2s}
+  .critique-card:hover{background:rgba(139,69,19,0.02);box-shadow:0 2px 8px rgba(139,69,19,0.1)}
   .critique-card h3{font-family:'Merriweather',serif;font-size:15px;color:var(--accent);margin-bottom:4px}
   .critique-card .meta{font-size:12px;color:var(--text-light);margin-bottom:10px}
   .critique-card .body{font-size:14px;line-height:1.7;white-space:pre-wrap}
   .critique-actions{display:flex;gap:8px;margin-top:10px}
+
+  /* Critique Detail View */
+  .critique-detail-overlay{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;z-index:150;overflow-y:auto}
+  .critique-detail-overlay.show{display:flex}
+  .critique-detail-header{background:var(--bg-sidebar);padding:20px 32px;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:16px}
+  .critique-detail-header button{background:transparent;border:none;color:var(--accent);font-size:18px;cursor:pointer;padding:4px 8px;font-weight:600;transition:all 0.2s}
+  .critique-detail-header button:hover{color:var(--accent-hover)}
+  .critique-detail-content{padding:40px 32px;max-width:800px;margin:0 auto;width:100%}
+  .critique-detail-book{font-size:12px;color:var(--text-light);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+  .critique-detail-title{font-family:'Merriweather',serif;font-size:32px;font-weight:700;color:var(--accent);margin-bottom:12px}
+  .critique-detail-author{font-size:16px;color:var(--text-light);margin-bottom:24px}
+  .critique-detail-meta{display:flex;align-items:center;gap:16px;font-size:13px;color:var(--text-light);margin-bottom:32px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+  .critique-detail-body{font-family:'Merriweather',serif;font-size:16px;line-height:2;color:var(--text);white-space:pre-wrap}
 
   /* Loan */
   .loan-book-select{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px}
@@ -142,6 +161,8 @@
     .nav-item{padding:12px;justify-content:center}
     .main{margin-left:64px;padding:20px}
     .form-grid{grid-template-columns:1fr}
+    .critique-detail-content{padding:20px;font-size:14px}
+    .critique-detail-title{font-size:24px}
   }
 </style>
 </head>
@@ -180,8 +201,19 @@
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="saveConfig()">Connecter</button>
+      <button class="btn btn-secondary" onclick="closeConfig()">Fermer</button>
     </div>
     <p id="cfg-error" style="color:var(--danger);font-size:13px;margin-top:10px;display:none"></p>
+  </div>
+</div>
+
+<!-- CRITIQUE DETAIL VIEW -->
+<div class="critique-detail-overlay" id="critique-detail-overlay">
+  <div class="critique-detail-header">
+    <button onclick="closeCritiqueDetail()">← Retour</button>
+  </div>
+  <div class="critique-detail-content">
+    <div id="critique-detail-body-content"></div>
   </div>
 </div>
 
@@ -220,7 +252,7 @@
   <div id="tab-inventory" class="tab-content">
     <h1 class="page-title">📖 Inventaire</h1>
     <div class="card">
-      <div class="card-title">Ajouter un livre</div>
+      <div class="card-title" id="add-book-title">Ajouter un livre</div>
       <div class="form-grid">
         <div class="form-group"><label>Titre *</label><input type="text" id="inp-title" placeholder="Titre du livre"></div>
         <div class="form-group"><label>Auteur</label><input type="text" id="inp-author" placeholder="Nom de l'auteur"></div>
@@ -245,6 +277,7 @@
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btn-add" onclick="addBook()">Ajouter le livre</button>
+        <button class="btn btn-secondary" id="btn-add-cancel" onclick="cancelEditBook()" style="display:none">Annuler</button>
         <button class="btn btn-secondary" onclick="clearForm()">Effacer</button>
       </div>
     </div>
@@ -302,7 +335,15 @@
       </div>
       <div id="search-count" style="font-size:13px;color:var(--text-light);margin-bottom:12px"></div>
       <div class="table-wrapper">
-        <table><thead><tr><th>Titre</th><th>Auteur</th><th>Genre</th><th>Année</th><th>Lu</th><th>Étoiles</th><th>Commentaire</th></tr></thead>
+        <table><thead><tr>
+          <th class="sortable" onclick="sortSearch('title')">Titre</th>
+          <th class="sortable" onclick="sortSearch('author')">Auteur</th>
+          <th class="sortable" onclick="sortSearch('genre')">Genre</th>
+          <th class="sortable" onclick="sortSearch('year')">Année</th>
+          <th class="sortable" onclick="sortSearch('read_status')">Lu</th>
+          <th class="sortable" onclick="sortSearch('stars')">Étoiles</th>
+          <th>Commentaire</th>
+        </tr></thead>
           <tbody id="search-table"></tbody>
         </table>
       </div>
@@ -329,6 +370,9 @@
     </div>
     <div class="card">
       <div class="card-title">Toutes les critiques</div>
+      <div class="search-bar" style="margin-bottom:16px">
+        <input type="text" id="critiques-search" placeholder="Chercher par titre, auteur ou contenu..." oninput="filterCritiques()">
+      </div>
       <div id="critiques-list"></div>
       <div id="empty-critiques" class="empty-state"><div class="icon">📝</div><p>Aucune critique. Choisis un livre et partage ton avis !</p></div>
     </div>
@@ -345,6 +389,7 @@ let critiques = [];
 let selectedStars = { add: 0, critique: 0 };
 let selectedLoanBook = null;
 let editingCritiqueId = null;
+let editingBookId = null;
 let userName = 'Anonyme';
 
 // ====== PASSWORD ======
@@ -380,6 +425,14 @@ function loadConfig() {
   } else {
     document.getElementById('config-modal').style.display = 'flex';
   }
+}
+
+function closeConfig() {
+  if (!sbClient) {
+    alert('Veuillez d\'abord connecter votre bibliothèque.');
+    return;
+  }
+  document.getElementById('config-modal').style.display = 'none';
 }
 
 async function saveConfig() {
@@ -439,20 +492,74 @@ async function addBook() {
   const title = document.getElementById('inp-title').value.trim();
   if (!title) { toast('Le titre est obligatoire !'); return; }
   document.getElementById('btn-add').disabled = true;
-  const { error } = await sbClient.from('books').insert({
-    title,
-    author: document.getElementById('inp-author').value.trim(),
-    genre: document.getElementById('inp-genre').value,
-    year: parseInt(document.getElementById('inp-year').value) || null,
-    read_status: document.getElementById('inp-read').value,
-    stars: selectedStars.add,
-    comment: document.getElementById('inp-comment').value.trim(),
-    updated_by: userName
-  });
-  document.getElementById('btn-add').disabled = false;
-  if (error) { toast('Erreur: ' + error.message); return; }
+
+  if (editingBookId) {
+    // Update mode
+    const { error } = await sbClient.from('books').update({
+      title,
+      author: document.getElementById('inp-author').value.trim(),
+      genre: document.getElementById('inp-genre').value,
+      year: parseInt(document.getElementById('inp-year').value) || null,
+      read_status: document.getElementById('inp-read').value,
+      stars: selectedStars.add,
+      comment: document.getElementById('inp-comment').value.trim(),
+      updated_by: userName
+    }).eq('id', editingBookId);
+
+    document.getElementById('btn-add').disabled = false;
+    if (error) { toast('Erreur: ' + error.message); return; }
+    editingBookId = null;
+    clearForm();
+    document.getElementById('btn-add').textContent = 'Ajouter le livre';
+    document.getElementById('add-book-title').textContent = 'Ajouter un livre';
+    document.getElementById('btn-add-cancel').style.display = 'none';
+    toast('Livre modifié !');
+  } else {
+    // Insert mode
+    const { error } = await sbClient.from('books').insert({
+      title,
+      author: document.getElementById('inp-author').value.trim(),
+      genre: document.getElementById('inp-genre').value,
+      year: parseInt(document.getElementById('inp-year').value) || null,
+      read_status: document.getElementById('inp-read').value,
+      stars: selectedStars.add,
+      comment: document.getElementById('inp-comment').value.trim(),
+      updated_by: userName
+    });
+    document.getElementById('btn-add').disabled = false;
+    if (error) { toast('Erreur: ' + error.message); return; }
+    clearForm();
+    toast('Livre ajouté !');
+  }
+}
+
+function editBook(id) {
+  const book = books.find(b => b.id === id);
+  if (!book) return;
+
+  editingBookId = id;
+  document.getElementById('inp-title').value = book.title || '';
+  document.getElementById('inp-author').value = book.author || '';
+  document.getElementById('inp-genre').value = book.genre || '';
+  document.getElementById('inp-year').value = book.year || '';
+  document.getElementById('inp-read').value = book.read_status || 'Non';
+  document.getElementById('inp-comment').value = book.comment || '';
+  setStars('add', book.stars || 0);
+
+  document.getElementById('btn-add').textContent = 'Sauvegarder les modifications';
+  document.getElementById('add-book-title').textContent = 'Modifier le livre';
+  document.getElementById('btn-add-cancel').style.display = 'inline-block';
+
+  showTab('inventory');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancelEditBook() {
+  editingBookId = null;
   clearForm();
-  toast('Livre ajouté !');
+  document.getElementById('btn-add').textContent = 'Ajouter le livre';
+  document.getElementById('add-book-title').textContent = 'Ajouter un livre';
+  document.getElementById('btn-add-cancel').style.display = 'none';
 }
 
 async function deleteBook(id) {
@@ -534,6 +641,32 @@ function cancelEdit() {
   document.getElementById('btn-cancel-edit').style.display = 'none';
 }
 
+function showCritiqueDetail(id) {
+  const c = critiques.find(x => x.id === id);
+  if (!c) return;
+  const b = books.find(x => x.id === c.book_id) || {};
+  const date = new Date(c.created_at).toLocaleDateString('fr-FR');
+
+  const html = `
+    <div class="critique-detail-book">${esc(b.author || 'Auteur inconnu')}</div>
+    <h1 class="critique-detail-title">${esc(b.title || 'Livre supprimé')}</h1>
+    <div class="critique-detail-author"></div>
+    <div class="critique-detail-meta">
+      <span>${starsHtml(c.stars)}</span>
+      <span>Par ${esc(c.author_name)}</span>
+      <span>${date}</span>
+    </div>
+    <div class="critique-detail-body">${esc(c.text)}</div>
+  `;
+
+  document.getElementById('critique-detail-body-content').innerHTML = html;
+  document.getElementById('critique-detail-overlay').classList.add('show');
+}
+
+function closeCritiqueDetail() {
+  document.getElementById('critique-detail-overlay').classList.remove('show');
+}
+
 // ====== RENDER ======
 function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
 
@@ -592,7 +725,7 @@ function renderBooks() {
     <td><strong>${esc(b.title)}</strong></td><td>${esc(b.author)}</td><td>${esc(b.genre)}</td>
     <td>${b.year||''}</td><td>${readBadge(b.read_status)}</td><td>${starsHtml(b.stars)}</td>
     <td>${b.loaned_to ? '<span class="badge badge-prete">📦 '+esc(b.loaned_to)+'</span>':''}</td>
-    <td><button class="btn btn-danger btn-sm" onclick="deleteBook('${b.id}')">Supprimer</button></td>
+    <td><button class="btn btn-secondary btn-sm" onclick="editBook('${b.id}')">Modifier</button> <button class="btn btn-danger btn-sm" onclick="deleteBook('${b.id}')">Supprimer</button></td>
   </tr>`).join('');
 }
 
@@ -623,18 +756,54 @@ function renderLoans() {
   </tr>`).join('');
 }
 
+let searchSortCol = null;
+let searchSortDir = 'asc';
+let lastSearchResults = [];
+
+function sortSearch(col) {
+  if (searchSortCol === col) {
+    searchSortDir = searchSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    searchSortCol = col;
+    searchSortDir = 'asc';
+  }
+  document.querySelectorAll('#tab-search th.sortable').forEach(th => th.classList.remove('asc','desc'));
+  const headers = document.querySelectorAll('#tab-search th.sortable');
+  const colMap = ['title','author','genre','year','read_status','stars'];
+  const idx = colMap.indexOf(col);
+  if (idx >= 0 && headers[idx]) headers[idx].classList.add(searchSortDir);
+  renderSearchResults();
+}
+
 function doSearch() {
   const q = (document.getElementById('search-query').value||'').toLowerCase();
   const genre = document.getElementById('search-genre').value;
   const read = document.getElementById('search-read').value;
   const minStars = parseInt(document.getElementById('search-stars').value)||0;
-  const results = books.filter(b => {
+  lastSearchResults = books.filter(b => {
     if (q && !(b.title?.toLowerCase().includes(q) || b.author?.toLowerCase().includes(q) || b.comment?.toLowerCase().includes(q))) return false;
     if (genre && b.genre !== genre) return false;
     if (read && b.read_status !== read) return false;
     if (minStars && (b.stars||0) < minStars) return false;
     return true;
   });
+  renderSearchResults();
+}
+
+function renderSearchResults() {
+  let results = [...lastSearchResults];
+  if (searchSortCol) {
+    results.sort((a, b) => {
+      let va = a[searchSortCol], vb = b[searchSortCol];
+      if (searchSortCol === 'year' || searchSortCol === 'stars') {
+        va = Number(va) || 0; vb = Number(vb) || 0;
+        return searchSortDir === 'asc' ? va - vb : vb - va;
+      }
+      va = (va || '').toString().toLowerCase();
+      vb = (vb || '').toString().toLowerCase();
+      return searchSortDir === 'asc' ? va.localeCompare(vb, 'fr') : vb.localeCompare(va, 'fr');
+    });
+  }
   document.getElementById('search-count').textContent = `${results.length} livre${results.length!==1?'s':''} trouvé${results.length!==1?'s':''}`;
   const tbody = document.getElementById('search-table');
   const empty = document.getElementById('empty-search');
@@ -662,16 +831,28 @@ function renderCritiques() {
   list.innerHTML = critiques.map(c => {
     const b = books.find(x => x.id === c.book_id);
     const date = new Date(c.created_at).toLocaleDateString('fr-FR');
-    return `<div class="critique-card">
+    return `<div class="critique-card" onclick="event.target.closest('.critique-actions') || showCritiqueDetail('${c.id}')">
       <h3>${b ? esc(b.title) : 'Livre supprimé'}</h3>
       <div class="meta">${b ? esc(b.author)+' · ':''} ${starsHtml(c.stars)} · par ${esc(c.author_name)} · ${date}</div>
-      <div class="body">${esc(c.text)}</div>
-      <div class="critique-actions">
+      <div class="body">${esc(c.text).substring(0, 200)}${esc(c.text).length > 200 ? '...' : ''}</div>
+      <div class="critique-actions" onclick="event.stopPropagation()">
         <button class="btn btn-secondary btn-sm" onclick="editCritique('${c.id}')">Modifier</button>
         <button class="btn btn-danger btn-sm" onclick="deleteCritique('${c.id}')">Supprimer</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function filterCritiques() {
+  const query = (document.getElementById('critiques-search').value || '').toLowerCase();
+  const cards = document.querySelectorAll('#critiques-list .critique-card');
+  cards.forEach(card => {
+    const title = card.querySelector('h3').textContent.toLowerCase();
+    const author = card.querySelector('.meta').textContent.toLowerCase();
+    const body = card.querySelector('.body').textContent.toLowerCase();
+    const matches = title.includes(query) || author.includes(query) || body.includes(query);
+    card.style.display = matches ? 'block' : 'none';
+  });
 }
 
 // ====== UTILS ======
@@ -685,6 +866,10 @@ function clearForm() {
   document.getElementById('inp-genre').value='';
   document.getElementById('inp-read').value='Non';
   setStars('add', 0);
+  editingBookId = null;
+  document.getElementById('btn-add').textContent = 'Ajouter le livre';
+  document.getElementById('add-book-title').textContent = 'Ajouter un livre';
+  document.getElementById('btn-add-cancel').style.display = 'none';
 }
 
 function showTab(name) {
