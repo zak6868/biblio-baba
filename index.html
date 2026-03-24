@@ -314,7 +314,7 @@
 
 <script>
 // ====== CONFIG ======
-let supabase = null;
+let sbClient = null;
 let books = [];
 let critiques = [];
 let selectedStars = { add: 0, critique: 0 };
@@ -360,7 +360,7 @@ function showCfgError(msg) {
 
 // ====== SUPABASE INIT ======
 async function initSupabase(url, key) {
-  supabase = window.supabase.createClient(url, key);
+  sbClient = window.supabase.createClient(url, key);
   await loadBooks();
   await loadCritiques();
   subscribeRealtime();
@@ -368,17 +368,17 @@ async function initSupabase(url, key) {
 
 // ====== REALTIME ======
 function subscribeRealtime() {
-  supabase.channel('books-changes')
+  sbClient.channel('books-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'books' }, () => loadBooks())
     .subscribe();
-  supabase.channel('critiques-changes')
+  sbClient.channel('critiques-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'critiques' }, () => loadCritiques())
     .subscribe();
 }
 
 // ====== BOOKS CRUD ======
 async function loadBooks() {
-  const { data } = await supabase.from('books').select('*').order('created_at', { ascending: false });
+  const { data } = await sbClient.from('books').select('*').order('created_at', { ascending: false });
   books = data || [];
   renderBooks();
   renderLoans();
@@ -390,7 +390,7 @@ async function addBook() {
   const title = document.getElementById('inp-title').value.trim();
   if (!title) { toast('Le titre est obligatoire !'); return; }
   document.getElementById('btn-add').disabled = true;
-  const { error } = await supabase.from('books').insert({
+  const { error } = await sbClient.from('books').insert({
     title,
     author: document.getElementById('inp-author').value.trim(),
     genre: document.getElementById('inp-genre').value,
@@ -408,7 +408,7 @@ async function addBook() {
 
 async function deleteBook(id) {
   if (!confirm('Supprimer ce livre ?')) return;
-  await supabase.from('books').delete().eq('id', id);
+  await sbClient.from('books').delete().eq('id', id);
   toast('Livre supprimé');
 }
 
@@ -416,20 +416,20 @@ async function loanBook() {
   if (!selectedLoanBook) { toast('Sélectionne un livre !'); return; }
   const to = document.getElementById('inp-loan-to').value.trim();
   if (!to) { toast('Indique à qui !'); return; }
-  await supabase.from('books').update({ loaned_to: to, updated_by: userName }).eq('id', selectedLoanBook);
+  await sbClient.from('books').update({ loaned_to: to, updated_by: userName }).eq('id', selectedLoanBook);
   selectedLoanBook = null;
   document.getElementById('inp-loan-to').value = '';
   toast('Prêt enregistré !');
 }
 
 async function returnBook(id) {
-  await supabase.from('books').update({ loaned_to: '', updated_by: userName }).eq('id', id);
+  await sbClient.from('books').update({ loaned_to: '', updated_by: userName }).eq('id', id);
   toast('Livre récupéré !');
 }
 
 // ====== CRITIQUES CRUD ======
 async function loadCritiques() {
-  const { data } = await supabase.from('critiques').select('*').order('created_at', { ascending: false });
+  const { data } = await sbClient.from('critiques').select('*').order('created_at', { ascending: false });
   critiques = data || [];
   renderCritiques();
 }
@@ -441,13 +441,13 @@ async function saveCritique() {
   if (!text) { toast('Écris ta critique !'); return; }
   document.getElementById('btn-critique').disabled = true;
   if (editingCritiqueId) {
-    await supabase.from('critiques').update({ text, stars: selectedStars.critique, updated_at: new Date().toISOString() }).eq('id', editingCritiqueId);
+    await sbClient.from('critiques').update({ text, stars: selectedStars.critique, updated_at: new Date().toISOString() }).eq('id', editingCritiqueId);
     editingCritiqueId = null;
     document.getElementById('btn-critique').textContent = 'Publier la critique';
     document.getElementById('btn-cancel-edit').style.display = 'none';
     toast('Critique modifiée !');
   } else {
-    await supabase.from('critiques').insert({ book_id: bookId, text, stars: selectedStars.critique, author_name: userName });
+    await sbClient.from('critiques').insert({ book_id: bookId, text, stars: selectedStars.critique, author_name: userName });
     toast('Critique publiée !');
   }
   document.getElementById('btn-critique').disabled = false;
@@ -458,7 +458,7 @@ async function saveCritique() {
 
 async function deleteCritique(id) {
   if (!confirm('Supprimer cette critique ?')) return;
-  await supabase.from('critiques').delete().eq('id', id);
+  await sbClient.from('critiques').delete().eq('id', id);
   toast('Critique supprimée');
 }
 
